@@ -1,64 +1,60 @@
-# SHEEP PALPITES — projeto Next.js
+# SHEEP PALPITES — integração API-Football (versão 1.1)
 
-Projeto inicial de aplicação web com:
-- Next.js 14 + TypeScript
-- Dashboard responsivo e mascote vetorial carneiro de óculos nerd
-- Categorias: gols, escanteios, cartões, finalizações e chutes no alvo
-- Dois lados de handicap por mercado
-- API interna `/api/matches` e `/api/health`
-- Páginas de metodologia, histórico e administração
-- Motor inicial de probabilidades Poisson para distribuição de contagens
-- Schema SQL inicial para Supabase
-- Dados de demonstração explicitamente identificados
+## O que esta versão faz
+- Consulta fixtures do dia pela API-Football no fuso `America/Sao_Paulo`.
+- Prioriza ligas e copas de maior relevância por IDs conhecidos e depois outras partidas disponíveis.
+- Analisa até 4 partidas por padrão (configurável até 5).
+- Para cada jogo, busca os últimos 5 jogos de cada equipe e as estatísticas dos confrontos anteriores.
+- Estima gols esperados a partir de gols marcados/sofridos recentes.
+- Calcula médias recentes de escanteios, cartões, finalizações e chutes no alvo.
+- Gera dois palpites de handicap para cada mercado quando há amostra mínima.
+- Não inventa palpites para mercados sem estatísticas suficientes.
+- Usa cache de 6 horas nas consultas individuais para proteger a cota da API.
+- Interface com filtros por mercado, status dos dados e botão de atualização.
 
-## Limitações importantes desta entrega
-A aplicação roda e compila como protótipo funcional. Ainda NÃO existe integração real validada com API esportiva, autenticação de administrador, persistência efetiva do histórico nem modelo calibrado por competição. O adaptador não inventa dados ao vivo: enquanto não estiver implementado, a tela permanece em modo DEMO.
+## Arquivos principais
+- `lib/football-api.ts`: integração API-Football, coleta histórica e cálculo.
+- `app/api/matches/route.ts`: endpoint interno que serve as análises.
+- `components/Dashboard.tsx`: dashboard.
+- `app/globals.css`: identidade visual.
+- `app/methodology/page.tsx`: transparência da metodologia.
 
-O motor estatístico atual é uma base técnica simples, não deve ser usado como aconselhamento de apostas. Modelos por mercado, tratamento de linhas asiáticas e liquidação precisam de validação independente antes de produção.
+## Atualização no GitHub
+1. Baixe e extraia o ZIP.
+2. No repositório `calvette-ui/sheep-palpites`, substitua os arquivos e pastas pelos desta versão, mantendo os caminhos.
+3. Faça commit na branch `main`.
+4. A Vercel fará o deploy automaticamente.
+5. Confirme se `API_FOOTBALL_KEY` continua cadastrada no projeto Vercel (não adicione a chave ao GitHub).
 
-## Requisitos
-- Node.js 20+
-- npm
+## Variável de ambiente
+`API_FOOTBALL_KEY` — já cadastrada na Vercel pelo usuário.
+`MAX_MATCHES_TO_ANALYZE` — opcional; padrão 3, máximo 5.
 
-## Rodar localmente
+## Cota da API
+Cada atualização pode usar aproximadamente:
+- 1 chamada para partidas do dia;
+- 2 chamadas de fixtures recentes por partida;
+- até 10 chamadas de estatísticas históricas por partida (5 por equipe).
+
+Com 3 jogos, o teto aproximado é 37 chamadas em uma primeira coleta; cache reduz chamadas subsequentes enquanto estiver ativo. A API pode não fornecer todos os mercados para todas as ligas.
+
+## Limitações honestas
+- A API-Football não fornece xG oficial em todos os planos/competições; esta versão chama a projeção de `gols esperados (modelo)` e calcula com gols marcados/sofridos recentes.
+- O modelo Poisson é uma primeira versão, não calibrada por liga nem validada por backtest. A probabilidade exibida é uma estimativa matemática do modelo.
+- O mercado só aparece se houver pelo menos três jogos recentes com estatística para cada equipe. Não há fallback inventado.
+- A seleção de jogos prioriza IDs de grandes ligas, mas também inclui outros jogos retornados se não houver partidas dessas ligas.
+- O histórico persistente e autenticação administrativa ainda não estão implementados.
+- A rota pode atingir limite de duração dependendo do plano Vercel e do número de partidas selecionadas. Se houver timeout na Vercel Hobby, defina `MAX_MATCHES_TO_ANALYZE=1` ou `2` nas variáveis de ambiente.
+
+## Teste local
+Node.js 20+:
 ```bash
 npm install
 cp .env.example .env.local
+# edite .env.local com sua chave API-Football
 npm run dev
 ```
-Abra http://localhost:3000.
+Acesse `http://localhost:3000` e `http://localhost:3000/api/matches`.
 
-## Build de produção
-```bash
-npm run build
-npm start
-```
-
-## Supabase
-1. Crie um projeto em https://supabase.com.
-2. Abra SQL Editor.
-3. Execute `supabase/schema.sql`.
-4. Copie URL e anon key para `.env.local`.
-5. Nunca exponha `SUPABASE_SERVICE_ROLE_KEY` no frontend.
-
-## API esportiva
-1. Contrate/ative um plano com estatísticas adequadas em https://www.api-football.com/.
-2. Configure `API_FOOTBALL_KEY` nas variáveis de ambiente da Vercel.
-3. Implemente e valide o adaptador em `lib/provider.ts` para os endpoints e cobertura contratados.
-4. Só então defina `ENABLE_LIVE_DATA=true`.
-A presença de uma chave não significa que todas as ligas fornecem escanteios, cartões, finalizações ou escalações.
-
-## Deploy Vercel
-1. Envie todo o conteúdo desta pasta para um repositório GitHub.
-2. Na Vercel, importe o repositório.
-3. Framework: Next.js (detecção automática).
-4. Configure variáveis a partir de `.env.example`.
-5. Deploy.
-6. Confirme `/api/health` e `/api/matches`.
-
-## Estrutura
-- `app/`: páginas e rotas API
-- `components/`: componentes React
-- `lib/`: tipos, motor e provedor de dados
-- `supabase/schema.sql`: estrutura inicial de dados
-- `public/`: assets públicos
+## Fonte oficial da API
+https://www.api-football.com/documentation-v3

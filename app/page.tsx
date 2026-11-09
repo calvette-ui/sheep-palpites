@@ -1,3 +1,3 @@
 import Dashboard from "@/components/Dashboard";
-import { demoMatches } from "@/lib/demo";
-export default function Home(){return <Dashboard initial={demoMatches}/>}
+export const dynamic="force-dynamic";
+export default function Home(){return <Dashboard/>}

@@ -1,6 +1,6 @@
 {
   "name": "sheep-palpites",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,19 +9,17 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.1",
     "lucide-react": "^0.468.0",
     "next": "14.2.23",
     "react": "^18",
-    "react-dom": "^18",
-    "recharts": "^2.15.1"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "typescript": "^5",
     "eslint": "^8",
-    "eslint-config-next": "14.2.23"
+    "eslint-config-next": "14.2.23",
+    "typescript": "^5"
   }
 }
