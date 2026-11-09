@@ -1,2 +1,2 @@
-const nextConfig = {};
+const nextConfig = { poweredByHeader: false };
 export default nextConfig;
