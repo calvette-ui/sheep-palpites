@@ -32,6 +32,7 @@ type RecentTeamGame = {
   teamId: number;
   scored: number;
   conceded: number;
+  season: number;
 };
 
 type FixtureStatistic = {
@@ -100,12 +101,19 @@ async function apiGet<T>(
 }
 
 function getBrazilDate(): string {
-  return new Intl.DateTimeFormat("en-CA", {
+  // Monta YYYY-MM-DD explicitamente: alguns runtimes retornam MM/DD/YYYY
+  // mesmo com locale en-CA, o que quebrava a data exibida no painel.
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  }).format(new Date());
+  }).formatToParts(new Date());
+
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function mean(values: number[]): number | null {
@@ -315,7 +323,8 @@ const STAT_NAMES: Record<Exclude<Market, "goals">, string[]> = {
 
 function getFixtureForTeam(
   fixture: Fixture,
-  teamId: number
+  teamId: number,
+  season: number
 ): RecentTeamGame | null {
   const homeGoals = fixture.goals.home;
   const awayGoals = fixture.goals.away;
@@ -327,7 +336,8 @@ function getFixtureForTeam(
       fixtureId: fixture.fixture.id,
       teamId,
       scored: homeGoals,
-      conceded: awayGoals
+      conceded: awayGoals,
+      season
     };
   }
 
@@ -336,7 +346,8 @@ function getFixtureForTeam(
       fixtureId: fixture.fixture.id,
       teamId,
       scored: awayGoals,
-      conceded: homeGoals
+      conceded: homeGoals,
+      season
     };
   }
 
@@ -345,24 +356,49 @@ function getFixtureForTeam(
 
 async function getRecentGames(
   teamId: number,
-  season: number,
+  requestedSeason: number,
   apiKey: string
 ): Promise<RecentTeamGame[]> {
-  const result = await apiGet<Fixture>(
-    "/fixtures",
-    {
-      team: String(teamId),
-      last: "5",
-      season: String(season),
-      status: "FT",
-      timezone: TZ
-    },
-    apiKey
+  // A chave gratuita da API-Football pode bloquear a temporada atual.
+  // Tentamos a temporada solicitada e, se bloqueada, apenas temporadas
+  // históricas explicitamente liberadas pela própria mensagem da API.
+  const seasonsToTry = Array.from(
+    new Set([requestedSeason, 2024, 2023, 2022])
   );
 
-  return result.response
-    .map((fixture) => getFixtureForTeam(fixture, teamId))
-    .filter((game): game is RecentTeamGame => game !== null);
+  let lastError: unknown;
+
+  for (const season of seasonsToTry) {
+    try {
+      const result = await apiGet<Fixture>(
+        "/fixtures",
+        {
+          team: String(teamId),
+          last: "5",
+          season: String(season),
+          status: "FT",
+          timezone: TZ
+        },
+        apiKey
+      );
+
+      return result.response
+        .map((fixture) => getFixtureForTeam(fixture, teamId, season))
+        .filter((game): game is RecentTeamGame => game !== null);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+
+      // Só tenta temporada antiga quando a API indica bloqueio de plano.
+      if (!message.toLowerCase().includes("free plans do not have access")) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Não foi possível consultar temporadas disponíveis na API-Football.");
 }
 
 async function getFixtureStatistics(
@@ -496,10 +532,19 @@ export async function getTodayAnalysis() {
       ((awayGoals ?? 1.0) + (homeConceded ?? 1.0)) / 2
     );
 
-    const quality = Math.min(
+    const qualityBase = Math.min(
       1,
       Math.min(homeRecent.length, awayRecent.length) / 5
     );
+    const requestedSeason = fixture.league.season || Number(date.slice(0, 4));
+    const usedHistoricalFallback = [...homeRecent, ...awayRecent].some(
+      (game) => game.season !== requestedSeason
+    );
+    // Dados de 2022–2024 não devem receber confiança média/alta em jogos atuais.
+    const quality = usedHistoricalFallback ? qualityBase * 0.35 : qualityBase;
+    const historicalNotice = usedHistoricalFallback
+      ? " ATENÇÃO: plano da API bloqueou a temporada atual; foram usados dados históricos de 2022–2024, com confiança reduzida."
+      : "";
 
     const markets = {} as MatchAnalysis["markets"];
 
@@ -518,7 +563,8 @@ export async function getTodayAnalysis() {
       sampleHome: homeRecent.length,
       sampleAway: awayRecent.length,
       note:
-        "Projeção própria baseada em gols marcados e sofridos nos últimos cinco jogos; não é xG oficial."
+        "Projeção própria baseada em gols marcados e sofridos nos últimos cinco jogos; não é xG oficial." +
+        historicalNotice
     };
 
     const nonGoalMarkets: Array<Exclude<Market, "goals">> = [
@@ -576,7 +622,7 @@ export async function getTodayAnalysis() {
         sampleHome: homeStats.sample,
         sampleAway: awayStats.sample,
         note: available
-          ? `Médias calculadas em ${homeStats.sample} jogos do mandante e ${awayStats.sample} do visitante.`
+          ? `Médias calculadas em ${homeStats.sample} jogos do mandante e ${awayStats.sample} do visitante.${historicalNotice}`
           : "A API não retornou pelo menos três amostras válidas para cada equipe; palpites ocultados."
       };
     }
