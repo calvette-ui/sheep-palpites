@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function History(){return <main className="container subpage"><Link href="/">← Voltar ao painel</Link><div className="eyebrow">ACOMPANHAMENTO</div><h1>Histórico de palpites</h1><p>Esta área está preparada para receber palpites salvos, resultados oficiais e liquidação de handicap após a configuração do banco de dados e do provedor de resultados.</p><div className="empty-state"><h2>Histórico ainda não conectado</h2><p>Os cards da página inicial são exemplos temporários e não são gravados como recomendações reais.</p></div></main>}
