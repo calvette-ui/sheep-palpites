@@ -45,6 +45,44 @@ type FixtureStatistic = {
 
 const cache = new Map<string, { expires: number; value: unknown }>();
 
+// API-Football Free permite apenas 10 chamadas por minuto.
+// Serializamos chamadas nesta instância para evitar rajadas de requisições.
+// O cache do fetch do Next.js (revalidate) reduz chamadas entre invocações.
+let apiRequestQueue: Promise<void> = Promise.resolve();
+let lastApiRequestAt = 0;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runApiRequest<T>(url: string, apiKey: string): Promise<Response> {
+  let release!: () => void;
+  const previous = apiRequestQueue;
+  apiRequestQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+
+  try {
+    const elapsed = Date.now() - lastApiRequestAt;
+    const minimumGap = 6200;
+    if (lastApiRequestAt > 0 && elapsed < minimumGap) {
+      await wait(minimumGap - elapsed);
+    }
+
+    const response = await fetch(url, {
+      headers: { "x-apisports-key": apiKey },
+      next: { revalidate: 21600 }
+    });
+
+    lastApiRequestAt = Date.now();
+    return response;
+  } finally {
+    release();
+  }
+}
+
 function readCache<T>(key: string): T | undefined {
   const hit = cache.get(key);
   if (!hit) return undefined;
@@ -73,16 +111,24 @@ async function apiGet<T>(
   const cached = readCache<ApiResult<T>>(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(url.toString(), {
-    headers: { "x-apisports-key": apiKey },
-    next: { revalidate: 21600 }
-  });
+  const response = await runApiRequest(url.toString(), apiKey);
+  const body = await response.json();
+
+  if (
+    response.status === 429 ||
+    body.errors?.rateLimit ||
+    String(body.errors?.rateLimit ?? "").toLowerCase().includes("too many requests")
+  ) {
+    throw new Error(
+      "Limite da API-Football atingido (10 chamadas por minuto no plano gratuito). " +
+      "Aguarde pelo menos 60 segundos antes de atualizar novamente. " +
+      "O site não precisa de uma nova API KEY."
+    );
+  }
 
   if (!response.ok) {
     throw new Error(`API-Football HTTP ${response.status} em ${path}`);
   }
-
-  const body = await response.json();
 
   if (body.errors && Object.keys(body.errors).length > 0) {
     throw new Error(`API-Football: ${JSON.stringify(body.errors)}`);
@@ -392,7 +438,7 @@ async function getRecentGames(
           new Date(b.fixture.date).getTime() -
           new Date(a.fixture.date).getTime()
         )
-        .slice(0, 5)
+        .slice(0, 2)
         .map((fixture) => getFixtureForTeam(fixture, teamId, season))
         .filter((game): game is RecentTeamGame => game !== null);
     } catch (error) {
@@ -490,10 +536,8 @@ export async function getTodayAnalysis() {
     )
     .sort(sortFixtures);
 
-  const maxMatches = Math.max(
-    1,
-    Math.min(3, Number(process.env.MAX_MATCHES_TO_ANALYZE || 2))
-  );
+  const maxMatches = 1; // Free API: proteger o limite de 10 chamadas/minuto.
+
 
   const selectedFixtures = allFixtures.slice(0, maxMatches);
   const analyses: MatchAnalysis[] = [];
@@ -607,8 +651,8 @@ export async function getTodayAnalysis() {
       );
 
       const available =
-        homeStats.sample >= 3 &&
-        awayStats.sample >= 3 &&
+        homeStats.sample >= 2 &&
+        awayStats.sample >= 2 &&
         homeStats.average !== null &&
         awayStats.average !== null;
 
@@ -633,7 +677,7 @@ export async function getTodayAnalysis() {
         sampleAway: awayStats.sample,
         note: available
           ? `Médias calculadas em ${homeStats.sample} jogos do mandante e ${awayStats.sample} do visitante.${historicalNotice}`
-          : "A API não retornou pelo menos três amostras válidas para cada equipe; palpites ocultados."
+          : "A API não retornou pelo menos duas amostras válidas para cada equipe; palpites ocultados."
       };
     }
 
