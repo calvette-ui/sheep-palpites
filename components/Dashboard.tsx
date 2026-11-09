@@ -14,6 +14,19 @@ function kickoff(value: string) {
   }).format(new Date(value));
 }
 
+function formatBrazilDate(value?: string) {
+  if (!value) return "Consultando calendário...";
+  // Aceita YYYY-MM-DD e ISO completo, sem depender do locale do servidor.
+  const match = value.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    timeZone: "America/Sao_Paulo"
+  }).format(parsed);
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [market, setMarket] = useState<Market>("goals");
@@ -65,7 +78,7 @@ export default function Dashboard() {
 
     <section className="section-head">
       <div><div className="eyebrow">CENTRAL DE MERCADOS</div><h2>Principais partidas do dia</h2>
-        <p>{data?.date ? `Data: ${data.date.split("-").reverse().join("/")}` : "Consultando calendário..."} · Horário de Brasília</p>
+        <p>Data: {formatBrazilDate(data?.date)} · Horário de Brasília</p>
       </div>
       <button className="refresh" onClick={() => void load()} disabled={loading}>
         <RefreshCw size={15} className={loading ? "spin" : ""}/> Atualizar jogos
