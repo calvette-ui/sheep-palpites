@@ -55,3 +55,8 @@ cp .env.example .env.local
 # inserir a chave somente em .env.local
 npm run dev
 ```
+
+
+## Correção adicional de compatibilidade (R2.1)
+Foi incluído `lib/provider.ts` para compatibilidade com módulos antigos que ainda importam `Match` e chamam `getMatches()`. O provider agora usa a API-Football e não importa `demoMatches`.
+Se o repositório ainda tiver outros arquivos antigos que não existam nesta versão, substitua a pasta `lib` inteira pelo conteúdo desta pasta `lib` (incluindo `types.ts`, `version.ts`, `football-api.ts` e `provider.ts`). O arquivo `demo.ts` não é necessário nesta versão; pode ser excluído se não houver importações restantes.
