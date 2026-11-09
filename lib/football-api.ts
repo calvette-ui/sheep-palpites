@@ -370,12 +370,16 @@ async function getRecentGames(
 
   for (const season of seasonsToTry) {
     try {
+      // O parâmetro "last" não é aceito em alguns planos gratuitos.
+      // Buscamos a temporada por intervalo de datas e selecionamos os
+      // cinco jogos concluídos mais recentes localmente.
       const result = await apiGet<Fixture>(
         "/fixtures",
         {
           team: String(teamId),
-          last: "5",
           season: String(season),
+          from: `${season}-01-01`,
+          to: `${season}-12-31`,
           status: "FT",
           timezone: TZ
         },
@@ -383,6 +387,12 @@ async function getRecentGames(
       );
 
       return result.response
+        .filter((fixture) => fixture.fixture?.status?.short === "FT")
+        .sort((a, b) =>
+          new Date(b.fixture.date).getTime() -
+          new Date(a.fixture.date).getTime()
+        )
+        .slice(0, 5)
         .map((fixture) => getFixtureForTeam(fixture, teamId, season))
         .filter((game): game is RecentTeamGame => game !== null);
     } catch (error) {
